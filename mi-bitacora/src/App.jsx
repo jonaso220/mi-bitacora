@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -13,13 +13,7 @@ import {
   onSnapshot,
   serverTimestamp
 } from 'firebase/firestore';
-import {
-  ref,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject
-} from 'firebase/storage';
-import { auth, googleProvider, db, storage, DATA_COLLECTION } from './firebase';
+import { auth, googleProvider, db, DATA_COLLECTION } from './firebase';
 import { useToast } from './components/Toast';
 import {
   Car,
@@ -38,10 +32,7 @@ import {
   Activity,
   Pencil,
   Search,
-  SortAsc,
-  Camera,
   DollarSign,
-  ImageIcon,
   ArrowUpDown
 } from 'lucide-react';
 
@@ -78,14 +69,6 @@ export default function App() {
   };
   const [logForm, setLogForm] = useState(emptyLog);
   const [editingLogId, setEditingLogId] = useState(null);
-
-  // --- Photos ---
-  const [photoFiles, setPhotoFiles] = useState([]);
-  const [existingPhotos, setExistingPhotos] = useState([]);
-  const [photosToDelete, setPhotosToDelete] = useState([]);
-  const [uploading, setUploading] = useState(false);
-  const [lightboxPhoto, setLightboxPhoto] = useState(null);
-  const fileInputRef = useRef(null);
 
   // --- Search / Filter / Sort ---
   const [searchQuery, setSearchQuery] = useState('');
@@ -227,50 +210,6 @@ export default function App() {
   }, [vehicleLogs, filterType, searchQuery, sortConfig]);
 
   // ============================================
-  // PHOTO HELPERS
-  // ============================================
-
-  const handlePhotoSelect = (e) => {
-    const files = Array.from(e.target.files);
-    if (files.length === 0) return;
-    setPhotoFiles(prev => [...prev, ...files]);
-  };
-
-  const removeNewPhoto = (index) => {
-    setPhotoFiles(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const markExistingPhotoForDeletion = (photo) => {
-    setExistingPhotos(prev => prev.filter(p => p.url !== photo.url));
-    setPhotosToDelete(prev => [...prev, photo]);
-  };
-
-  const uploadPhotos = async (logId) => {
-    if (photoFiles.length === 0) return [];
-    const urls = [];
-    for (const file of photoFiles) {
-      const timestamp = Date.now();
-      const storageRef = ref(storage, `users/${user.uid}/photos/${logId}_${timestamp}_${file.name}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      urls.push({ url, name: file.name, path: storageRef.fullPath });
-    }
-    return urls;
-  };
-
-  const deletePhotosFromStorage = async (photos) => {
-    for (const photo of photos) {
-      try {
-        if (photo.path) {
-          await deleteObject(ref(storage, photo.path));
-        }
-      } catch (err) {
-        console.error("Error borrando foto:", err);
-      }
-    }
-  };
-
-  // ============================================
   // VEHICLE HANDLERS
   // ============================================
 
@@ -324,7 +263,6 @@ export default function App() {
     try {
       const logsToDelete = logs.filter(log => log.vehicleId === id);
       for (const log of logsToDelete) {
-        if (log.photos?.length) await deletePhotosFromStorage(log.photos);
         await deleteDoc(doc(db, 'artifacts', DATA_COLLECTION, 'users', user.uid, 'maintenance_logs', log.id));
       }
       await deleteDoc(doc(db, 'artifacts', DATA_COLLECTION, 'users', user.uid, 'vehicles', id));
@@ -344,9 +282,6 @@ export default function App() {
   const openAddLog = () => {
     setLogForm(emptyLog);
     setEditingLogId(null);
-    setPhotoFiles([]);
-    setExistingPhotos([]);
-    setPhotosToDelete([]);
     setView('log-form');
   };
 
@@ -361,16 +296,12 @@ export default function App() {
       cost: log.cost || ''
     });
     setEditingLogId(log.id);
-    setPhotoFiles([]);
-    setExistingPhotos(log.photos || []);
-    setPhotosToDelete([]);
     setView('log-form');
   };
 
   const handleSaveLog = async (e) => {
     e.preventDefault();
     if (!user || !selectedVehicleId) return;
-    setUploading(true);
     try {
       const logData = {
         vehicleId: selectedVehicleId,
@@ -378,43 +309,24 @@ export default function App() {
       };
 
       if (editingLogId) {
-        // Upload new photos
-        const newPhotoUrls = await uploadPhotos(editingLogId);
-        // Delete removed photos
-        await deletePhotosFromStorage(photosToDelete);
-        // Merge photos
-        logData.photos = [...existingPhotos, ...newPhotoUrls];
         const docRef = doc(db, 'artifacts', DATA_COLLECTION, 'users', user.uid, 'maintenance_logs', editingLogId);
         await updateDoc(docRef, logData);
         toast("Registro actualizado");
       } else {
         logData.createdAt = serverTimestamp();
-        logData.photos = [];
-        const docRef = await addDoc(
+        await addDoc(
           collection(db, 'artifacts', DATA_COLLECTION, 'users', user.uid, 'maintenance_logs'),
           logData
         );
-        // Upload photos with the new doc ID
-        if (photoFiles.length > 0) {
-          const photoUrls = await uploadPhotos(docRef.id);
-          await updateDoc(doc(db, 'artifacts', DATA_COLLECTION, 'users', user.uid, 'maintenance_logs', docRef.id), {
-            photos: photoUrls
-          });
-        }
         toast("Servicio registrado");
       }
 
       setLogForm(emptyLog);
       setEditingLogId(null);
-      setPhotoFiles([]);
-      setExistingPhotos([]);
-      setPhotosToDelete([]);
       setView('dashboard');
     } catch (err) {
       console.error("Error guardando registro:", err);
       toast("Error al guardar. Revisa tu conexión.", "error");
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -423,7 +335,6 @@ export default function App() {
     const ok = await confirm("¿Eliminar este registro?");
     if (!ok) return;
     try {
-      if (log.photos?.length) await deletePhotosFromStorage(log.photos);
       await deleteDoc(doc(db, 'artifacts', DATA_COLLECTION, 'users', user.uid, 'maintenance_logs', log.id));
       toast("Registro eliminado");
     } catch (err) {
@@ -698,62 +609,12 @@ export default function App() {
             />
           </div>
 
-          {/* Photos */}
-          <div className="form-group">
-            <label>Fotos</label>
-            <div className="photo-upload-area" onClick={() => fileInputRef.current?.click()}>
-              <Camera size={24} />
-              <span>Agregar fotos</span>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handlePhotoSelect}
-                style={{ display: 'none' }}
-              />
-            </div>
-
-            {(existingPhotos.length > 0 || photoFiles.length > 0) && (
-              <div className="photo-preview-grid">
-                {existingPhotos.map((photo, i) => (
-                  <div key={`existing-${i}`} className="photo-preview-item">
-                    <img src={photo.url} alt={photo.name} onClick={() => setLightboxPhoto(photo.url)} />
-                    <button
-                      type="button"
-                      className="photo-remove-btn"
-                      onClick={() => markExistingPhotoForDeletion(photo)}
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-                {photoFiles.map((file, i) => (
-                  <div key={`new-${i}`} className="photo-preview-item">
-                    <img src={URL.createObjectURL(file)} alt={file.name} />
-                    <button
-                      type="button"
-                      className="photo-remove-btn"
-                      onClick={() => removeNewPhoto(i)}
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           <div className="form-actions">
             <button type="button" onClick={() => setView('dashboard')} className="btn-secondary">
               Cancelar
             </button>
-            <button type="submit" className="btn-primary btn-emerald" disabled={uploading}>
-              {uploading ? (
-                <><Clock size={18} /> Subiendo...</>
-              ) : (
-                <><CheckCircle2 size={18} /> {editingLogId ? 'Guardar' : 'Registrar'}</>
-              )}
+            <button type="submit" className="btn-primary btn-emerald">
+              <CheckCircle2 size={18} /> {editingLogId ? 'Guardar' : 'Registrar'}
             </button>
           </div>
         </form>
@@ -1043,19 +904,6 @@ export default function App() {
                       )}
                     </div>
                     {log.notes && <p className="history-notes">{log.notes}</p>}
-                    {log.photos?.length > 0 && (
-                      <div className="history-photos">
-                        {log.photos.map((photo, i) => (
-                          <img
-                            key={i}
-                            src={photo.url}
-                            alt={photo.name}
-                            className="history-photo-thumb"
-                            onClick={() => setLightboxPhoto(photo.url)}
-                          />
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
               ))}
@@ -1110,16 +958,6 @@ export default function App() {
       {view === 'vehicle-form' && renderVehicleForm()}
       {view === 'log-form' && renderLogForm()}
       {view === 'vehicle-list' && renderVehicleList()}
-
-      {/* Lightbox */}
-      {lightboxPhoto && (
-        <div className="lightbox-overlay" onClick={() => setLightboxPhoto(null)}>
-          <button className="lightbox-close" onClick={() => setLightboxPhoto(null)}>
-            <X size={24} />
-          </button>
-          <img src={lightboxPhoto} alt="" className="lightbox-image" />
-        </div>
-      )}
     </div>
   );
 }

@@ -1,8 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { initializeFirestore, persistentLocalCache } from 'firebase/firestore';
-import { getStorage } from 'firebase/storage';
-
 const firebaseConfig = {
   apiKey: "AIzaSyAw4ikfjaGQrDl_L-XNOkBTrWVTD1A-Ih0",
   authDomain: "mi-bitacora-auto.firebaseapp.com",
@@ -22,5 +20,4 @@ export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({})
 });
 
-export const storage = getStorage(app);
 export const DATA_COLLECTION = "mi-bitacora-v1";

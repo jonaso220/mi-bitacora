@@ -10,17 +10,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       manifest: false,
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/firebasestorage\.googleapis\.com\//,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'firebase-storage-photos',
-              expiration: { maxEntries: 100, maxAgeSeconds: 30 * 24 * 60 * 60 }
-            }
-          }
-        ]
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}']
       }
     })
   ],
