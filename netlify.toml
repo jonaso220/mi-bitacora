@@ -1,0 +1,4 @@
+[build]
+  base = "mi-bitacora"
+  command = "npm run build"
+  publish = "dist"
